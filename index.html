@@ -1,0 +1,3259 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<meta name="theme-color" content="#030712">
+
+<title>ORBIT-X | Live Earth & ISS Mission Control</title>
+
+<!-- =========================================================
+     TAILWIND
+========================================================= -->
+<script src="https://cdn.tailwindcss.com"></script>
+
+<script>
+tailwind.config = {
+    theme: {
+        extend: {
+            colors: {
+                space: {
+                    950: "#01030a",
+                    900: "#030712",
+                    800: "#07111f",
+                    700: "#0d1b2d"
+                },
+                neon: {
+                    blue: "#00f3ff",
+                    cyan: "#00e5ff",
+                    green: "#00ff66",
+                    purple: "#a855f7",
+                    orange: "#ff9900",
+                    red: "#ff3355"
+                }
+            },
+            fontFamily: {
+                orbitron: ["Orbitron", "sans-serif"],
+                inter: ["Inter", "sans-serif"]
+            }
+        }
+    }
+}
+</script>
+
+<!-- =========================================================
+     GOOGLE FONTS
+========================================================= -->
+<link
+href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Orbitron:wght@400;500;600;700;800;900&display=swap"
+rel="stylesheet">
+
+<!-- =========================================================
+     LEAFLET
+========================================================= -->
+<link
+rel="stylesheet"
+href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+
+<script
+src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js">
+</script>
+
+<!-- =========================================================
+     SOCKET.IO CLIENT
+========================================================= -->
+<script
+src="https://cdn.socket.io/4.8.1/socket.io.min.js">
+</script>
+
+<!-- =========================================================
+     THREE.JS
+========================================================= -->
+<script
+src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js">
+</script>
+
+<script
+src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js">
+</script>
+
+<script
+src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js">
+</script>
+
+<!-- =========================================================
+     STYLE
+========================================================= -->
+<style>
+
+*{
+    box-sizing:border-box;
+}
+
+html,
+body{
+    margin:0;
+    padding:0;
+    width:100%;
+    min-height:100%;
+    background:#030712;
+    color:#e5f7ff;
+    font-family:"Inter",sans-serif;
+    overflow-x:hidden;
+}
+
+body{
+    background:
+        radial-gradient(
+            circle at 50% 20%,
+            rgba(0,243,255,.05),
+            transparent 35%
+        ),
+        #030712;
+}
+
+.font-orbitron{
+    font-family:"Orbitron",sans-serif;
+}
+
+.glass{
+    background:
+        linear-gradient(
+            135deg,
+            rgba(8,20,35,.88),
+            rgba(3,8,18,.78)
+        );
+    backdrop-filter:blur(18px);
+    -webkit-backdrop-filter:blur(18px);
+    border:1px solid rgba(0,243,255,.18);
+}
+
+.glass:hover{
+    border-color:rgba(0,243,255,.35);
+}
+
+.neon-border{
+    border:1px solid rgba(0,243,255,.35);
+    box-shadow:
+        0 0 20px rgba(0,243,255,.07),
+        inset 0 0 20px rgba(0,243,255,.02);
+}
+
+.neon-text{
+    color:#00f3ff;
+    text-shadow:
+        0 0 8px rgba(0,243,255,.75),
+        0 0 25px rgba(0,243,255,.35);
+}
+
+.green-text{
+    color:#00ff66;
+    text-shadow:0 0 10px rgba(0,255,102,.5);
+}
+
+.scanning{
+    animation:scan 2s linear infinite;
+}
+
+@keyframes scan{
+    0%{
+        opacity:.3;
+    }
+    50%{
+        opacity:1;
+    }
+    100%{
+        opacity:.3;
+    }
+}
+
+.pulse-ring{
+    animation:pulseRing 1.5s ease-out infinite;
+}
+
+@keyframes pulseRing{
+    0%{
+        transform:scale(.8);
+        opacity:.9;
+    }
+    100%{
+        transform:scale(2);
+        opacity:0;
+    }
+}
+
+#earth-container{
+    position:relative;
+    width:100%;
+    min-height:650px;
+    overflow:hidden;
+    border-radius:14px;
+    background:
+        radial-gradient(
+            circle at center,
+            #0a1830 0%,
+            #030712 55%,
+            #01030a 100%
+        );
+}
+
+#earth-container canvas{
+    display:block;
+    width:100%;
+    height:100%;
+}
+
+#mini-map{
+    width:100%;
+    height:245px;
+    border-radius:12px;
+    overflow:hidden;
+}
+
+.leaflet-container{
+    background:#02050c!important;
+}
+
+.leaflet-control-attribution{
+    font-size:7px!important;
+    background:rgba(0,0,0,.65)!important;
+    color:#777!important;
+}
+
+.telemetry-card{
+    background:rgba(7,17,31,.75);
+    border:1px solid rgba(255,255,255,.06);
+    transition:.2s;
+}
+
+.telemetry-card:hover{
+    border-color:rgba(0,243,255,.3);
+    transform:translateY(-1px);
+}
+
+.mode-btn{
+    transition:.2s;
+}
+
+.mode-btn.active{
+    background:#00f3ff;
+    color:#020712;
+    box-shadow:
+        0 0 20px rgba(0,243,255,.4);
+}
+
+.mode-btn:not(.active){
+    background:#07111f;
+    color:#8ca4b5;
+}
+
+::-webkit-scrollbar{
+    width:5px;
+}
+
+::-webkit-scrollbar-track{
+    background:#02050c;
+}
+
+::-webkit-scrollbar-thumb{
+    background:#00f3ff55;
+    border-radius:10px;
+}
+
+::-webkit-scrollbar-thumb:hover{
+    background:#00f3ff;
+}
+
+.loader-ring{
+    width:55px;
+    height:55px;
+    border:3px solid rgba(0,243,255,.15);
+    border-top-color:#00f3ff;
+    border-radius:50%;
+    animation:spin 1s linear infinite;
+}
+
+@keyframes spin{
+    to{
+        transform:rotate(360deg);
+    }
+}
+
+</style>
+</head>
+
+<body>
+
+<!-- =========================================================
+     GPS MODAL
+========================================================= -->
+
+<div
+id="gps-modal"
+class="fixed inset-0 z-[9999] flex items-center justify-center bg-black/90 backdrop-blur-xl">
+
+    <div
+    class="glass neon-border rounded-3xl w-[92%] max-w-xl p-8 text-center relative overflow-hidden">
+
+        <div
+        class="absolute -top-24 -right-24 w-60 h-60 rounded-full bg-cyan-400/10 blur-3xl">
+        </div>
+
+        <div
+        class="absolute -bottom-24 -left-24 w-60 h-60 rounded-full bg-blue-500/10 blur-3xl">
+        </div>
+
+        <div
+        class="relative z-10">
+
+            <div
+            class="w-20 h-20 mx-auto mb-5 rounded-full border border-cyan-400/40 bg-cyan-400/10 flex items-center justify-center">
+
+                <div
+                class="relative">
+
+                    <div
+                    class="absolute inset-0 rounded-full border border-cyan-400/30 pulse-ring">
+                    </div>
+
+                    <span class="text-4xl">
+                        📡
+                    </span>
+
+                </div>
+
+            </div>
+
+            <div
+            class="font-orbitron text-2xl font-black neon-text tracking-widest mb-3">
+
+                MISSION CONTROL
+
+            </div>
+
+            <div
+            class="text-xs text-cyan-300/70 font-mono mb-4">
+
+                USER POSITION SYNCHRONIZATION
+
+            </div>
+
+            <p
+            class="text-sm text-gray-300 leading-7 mb-7">
+
+                Allow GPS Location Access for Real-Time Sync,
+                3D Earth positioning and User-to-ISS
+                line-of-sight distance calculation.
+
+            </p>
+
+            <div
+            class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+
+                <button
+                id="allow-gps"
+                class="py-3.5 rounded-xl bg-cyan-400 text-black font-orbitron font-bold text-xs hover:bg-cyan-300 transition">
+
+                    AUTHORIZE GPS
+
+                </button>
+
+                <button
+                id="guest-mode"
+                class="py-3.5 rounded-xl bg-slate-800 text-gray-300 border border-slate-700 font-orbitron font-bold text-xs hover:bg-slate-700 transition">
+
+                    GUEST MODE
+
+                </button>
+
+            </div>
+
+        </div>
+
+    </div>
+
+</div>
+
+
+<!-- =========================================================
+     HEADER
+========================================================= -->
+
+<header
+class="glass border-b border-cyan-400/20 sticky top-0 z-50">
+
+    <div
+    class="max-w-[2000px] mx-auto px-4 py-3 flex flex-wrap items-center justify-between gap-3">
+
+        <div>
+
+            <div
+            class="flex items-center gap-3">
+
+                <div
+                class="w-3 h-3 bg-green-400 rounded-full shadow-[0_0_15px_#00ff66] animate-pulse">
+                </div>
+
+                <h1
+                class="font-orbitron text-lg md:text-2xl font-black tracking-widest neon-text">
+
+                    ORBIT-X
+
+                </h1>
+
+                <span
+                class="text-[9px] md:text-xs text-purple-400 font-orbitron">
+
+                    MISSION CONTROL
+
+                </span>
+
+            </div>
+
+            <div
+            class="text-[8px] md:text-[10px] text-gray-500 font-mono mt-1">
+
+                REAL-TIME EARTH • SPACE • ISS TELEMETRY SYSTEM
+
+            </div>
+
+        </div>
+
+
+        <div
+        class="flex items-center gap-2">
+
+            <div
+            class="hidden md:flex items-center gap-2 px-3 py-2 rounded-lg bg-black/30 border border-cyan-400/10">
+
+                <span
+                class="text-[9px] text-gray-500 font-orbitron">
+
+                    TELEMETRY
+
+                </span>
+
+                <span
+                id="connection-status"
+                class="text-[9px] text-yellow-400 font-bold">
+
+                    CONNECTING
+
+                </span>
+
+            </div>
+
+            <div
+            class="flex bg-black/40 p-1 rounded-xl border border-cyan-400/10">
+
+                <button
+                id="earth-mode"
+                class="mode-btn active px-3 py-2 rounded-lg text-[9px] font-orbitron font-bold"
+                onclick="setCameraMode('earth')">
+
+                    EARTH ORBIT
+
+                </button>
+
+                <button
+                id="iss-mode"
+                class="mode-btn px-3 py-2 rounded-lg text-[9px] font-orbitron font-bold"
+                onclick="setCameraMode('iss')">
+
+                    CHASE ISS
+
+                </button>
+
+                <button
+                id="free-mode"
+                class="mode-btn px-3 py-2 rounded-lg text-[9px] font-orbitron font-bold"
+                onclick="setCameraMode('free')">
+
+                    FREE ROAM
+
+                </button>
+
+            </div>
+
+        </div>
+
+    </div>
+
+</header>
+
+
+<!-- =========================================================
+     MAIN
+========================================================= -->
+
+<main
+class="max-w-[2000px] mx-auto p-3 grid grid-cols-1 xl:grid-cols-12 gap-3">
+
+
+<!-- =========================================================
+     LEFT SIDEBAR
+========================================================= -->
+
+<aside
+class="xl:col-span-4 flex flex-col gap-3">
+
+
+<!-- TELEMETRY -->
+
+<section
+class="glass neon-border rounded-2xl p-4">
+
+    <div
+    class="flex items-center justify-between border-b border-cyan-400/10 pb-3 mb-3">
+
+        <div
+        class="font-orbitron text-[11px] font-bold neon-text tracking-widest">
+
+            ISS TELEMETRY
+
+        </div>
+
+        <div
+        class="text-[8px] text-green-400 font-mono">
+
+            ● LIVE STREAM
+
+        </div>
+
+    </div>
+
+
+    <div
+    class="grid grid-cols-2 gap-2">
+
+
+        <div class="telemetry-card rounded-xl p-3">
+
+            <div class="text-[8px] text-gray-500 font-orbitron">
+                LATITUDE
+            </div>
+
+            <div
+            id="iss-lat"
+            class="text-sm font-orbitron font-bold neon-text mt-1">
+
+                --.----
+
+            </div>
+
+        </div>
+
+
+        <div class="telemetry-card rounded-xl p-3">
+
+            <div class="text-[8px] text-gray-500 font-orbitron">
+                LONGITUDE
+            </div>
+
+            <div
+            id="iss-lng"
+            class="text-sm font-orbitron font-bold neon-text mt-1">
+
+                --.----
+
+            </div>
+
+        </div>
+
+
+        <div class="telemetry-card rounded-xl p-3">
+
+            <div class="text-[8px] text-gray-500 font-orbitron">
+                ALTITUDE
+            </div>
+
+            <div
+            id="iss-alt"
+            class="text-sm font-orbitron font-bold mt-1">
+
+                -- km
+
+            </div>
+
+        </div>
+
+
+        <div class="telemetry-card rounded-xl p-3">
+
+            <div class="text-[8px] text-gray-500 font-orbitron">
+                VELOCITY
+            </div>
+
+            <div
+            id="iss-velocity"
+            class="text-sm font-orbitron font-bold mt-1">
+
+                -- km/h
+
+            </div>
+
+        </div>
+
+
+        <div class="telemetry-card rounded-xl p-3">
+
+            <div class="text-[8px] text-gray-500 font-orbitron">
+                VISIBILITY
+            </div>
+
+            <div
+            id="iss-visibility"
+            class="text-sm font-orbitron font-bold text-orange-400 mt-1">
+
+                --
+
+            </div>
+
+        </div>
+
+
+        <div class="telemetry-card rounded-xl p-3">
+
+            <div class="text-[8px] text-gray-500 font-orbitron">
+                FOOTPRINT
+            </div>
+
+            <div
+            id="iss-footprint"
+            class="text-sm font-orbitron font-bold mt-1">
+
+                -- km
+
+            </div>
+
+        </div>
+
+    </div>
+
+
+    <!-- USER DISTANCE -->
+
+    <div
+    class="mt-3 rounded-xl p-4 border border-purple-400/30 bg-purple-500/5">
+
+        <div
+        class="flex justify-between items-center">
+
+            <span
+            class="text-[9px] text-purple-300 font-orbitron tracking-widest">
+
+                USER → ISS RANGE
+
+            </span>
+
+            <span class="text-purple-400">
+                ◉
+            </span>
+
+        </div>
+
+        <div
+        id="user-distance"
+        class="text-2xl font-orbitron font-black mt-2">
+
+            GPS DISABLED
+
+        </div>
+
+        <div
+        id="user-coordinates"
+        class="text-[8px] text-gray-500 font-mono mt-1">
+
+            Location synchronization pending...
+
+        </div>
+
+    </div>
+
+</section>
+
+
+<!-- =========================================================
+     MAP
+========================================================= -->
+
+<section
+class="glass neon-border rounded-2xl p-3">
+
+    <div
+    class="flex items-center justify-between mb-2">
+
+        <div
+        class="font-orbitron text-[10px] font-bold neon-text tracking-widest">
+
+            GLOBAL ORBIT MAP
+
+        </div>
+
+        <div
+        class="text-[8px] text-gray-500 font-mono">
+
+            ISS-25544
+
+        </div>
+
+    </div>
+
+    <div id="mini-map"></div>
+
+</section>
+
+
+<!-- =========================================================
+     NASA VIDEO
+========================================================= -->
+
+<section
+class="glass neon-border rounded-2xl p-3">
+
+    <div
+    class="flex justify-between items-center mb-2">
+
+        <div
+        class="font-orbitron text-[10px] font-bold neon-text tracking-widest">
+
+            LIVE EARTH FEED
+
+        </div>
+
+        <span
+        class="text-[8px] text-red-400 font-orbitron">
+
+            ● LIVE
+
+        </span>
+
+    </div>
+
+    <div
+    class="aspect-video rounded-xl overflow-hidden bg-black border border-gray-800">
+
+        <iframe
+        class="w-full h-full"
+        src="https://www.youtube-nocookie.com/embed/21X5lGlDOfg?autoplay=1&mute=1&controls=1&modestbranding=1"
+        title="NASA Live Earth View"
+        allow="autoplay; encrypted-media; picture-in-picture"
+        allowfullscreen>
+        </iframe>
+
+    </div>
+
+</section>
+
+
+<!-- SYSTEM INFO -->
+
+<section
+class="glass rounded-2xl p-4">
+
+    <div
+    class="font-orbitron text-[9px] text-cyan-300 mb-3">
+
+        SYSTEM STATUS
+
+    </div>
+
+    <div class="space-y-2">
+
+        <div class="flex justify-between text-[9px]">
+            <span class="text-gray-500">EARTH TEXTURE</span>
+            <span id="texture-status" class="text-yellow-400">LOADING</span>
+        </div>
+
+        <div class="flex justify-between text-[9px]">
+            <span class="text-gray-500">ATMOSPHERE</span>
+            <span class="text-green-400">ONLINE</span>
+        </div>
+
+        <div class="flex justify-between text-[9px]">
+            <span class="text-gray-500">ISS TRACKING</span>
+            <span class="text-green-400">ONLINE</span>
+        </div>
+
+        <div class="flex justify-between text-[9px]">
+            <span class="text-gray-500">3D ENGINE</span>
+            <span class="text-green-400">WEBGL</span>
+        </div>
+
+    </div>
+
+</section>
+
+</aside>
+
+
+<!-- =========================================================
+     3D EARTH
+========================================================= -->
+
+<section
+class="xl:col-span-8 glass neon-border rounded-2xl p-3 flex flex-col min-h-[650px]">
+
+    <div
+    class="flex flex-wrap items-center justify-between gap-2 px-2 pb-3">
+
+        <div>
+
+            <div
+            class="font-orbitron text-xs font-bold neon-text tracking-widest">
+
+                PHOTOREALISTIC 3D EARTH
+
+            </div>
+
+            <div
+            class="text-[8px] text-gray-500 font-mono mt-1">
+
+                SATELLITE MAP • CLOUDS • CITY LIGHTS • ATMOSPHERE • LIVE ISS
+
+            </div>
+
+        </div>
+
+
+        <div
+        class="flex gap-3 text-[8px] font-mono text-gray-400">
+
+            <span>
+                <i class="inline-block w-2 h-2 rounded-full bg-cyan-400 mr-1"></i>
+                ISS
+            </span>
+
+            <span>
+                <i class="inline-block w-2 h-2 rounded-full bg-red-500 mr-1"></i>
+                USER
+            </span>
+
+            <span>
+                <i class="inline-block w-2 h-2 rounded-full bg-yellow-400 mr-1"></i>
+                ORBIT
+            </span>
+
+        </div>
+
+    </div>
+
+
+    <div
+    id="earth-container"
+    class="flex-1">
+
+        <!-- LOADING -->
+
+        <div
+        id="earth-loading"
+        class="absolute inset-0 z-20 flex flex-col items-center justify-center bg-[#030712]/80 backdrop-blur-sm pointer-events-none">
+
+            <div class="loader-ring mb-5"></div>
+
+            <div
+            class="font-orbitron text-xs text-cyan-300 tracking-widest">
+
+                INITIALIZING EARTH ENGINE
+
+            </div>
+
+            <div
+            class="text-[8px] text-gray-500 font-mono mt-2">
+
+                LOADING REAL SATELLITE IMAGERY...
+
+            </div>
+
+        </div>
+
+
+        <!-- HUD -->
+
+        <div
+        class="absolute top-4 left-4 z-10 pointer-events-none">
+
+            <div
+            class="glass rounded-xl px-3 py-2">
+
+                <div
+                class="text-[8px] text-gray-500 font-orbitron">
+
+                    EARTH ENGINE
+
+                </div>
+
+                <div
+                id="earth-state"
+                class="text-[10px] text-green-400 font-mono">
+
+                    ONLINE
+
+                </div>
+
+            </div>
+
+        </div>
+
+
+        <div
+        class="absolute top-4 right-4 z-10 pointer-events-none">
+
+            <div
+            class="glass rounded-xl px-3 py-2 text-right">
+
+                <div
+                class="text-[8px] text-gray-500 font-orbitron">
+
+                    ORBITAL OBJECT
+
+                </div>
+
+                <div
+                class="text-[10px] text-cyan-300 font-mono">
+
+                    ISS / NORAD 25544
+
+                </div>
+
+            </div>
+
+        </div>
+
+
+        <div
+        class="absolute bottom-4 left-4 z-10 pointer-events-none">
+
+            <div
+            class="glass rounded-xl px-3 py-2">
+
+                <div class="text-[8px] text-gray-400 font-mono">
+
+                    DRAG
+                    <span class="text-cyan-300">ROTATE</span>
+
+                    &nbsp; • &nbsp;
+
+                    WHEEL
+                    <span class="text-cyan-300">ZOOM</span>
+
+                </div>
+
+            </div>
+
+        </div>
+
+
+        <div
+        class="absolute bottom-4 right-4 z-10 pointer-events-none">
+
+            <div
+            class="glass rounded-xl px-3 py-2 text-right">
+
+                <div
+                class="text-[8px] text-gray-500 font-orbitron">
+
+                    TRACKING
+
+                </div>
+
+                <div
+                id="tracking-state"
+                class="text-[9px] text-green-400 font-mono">
+
+                    ACTIVE
+
+                </div>
+
+            </div>
+
+        </div>
+
+    </div>
+
+</section>
+
+</main>
+
+
+<!-- =========================================================
+     FOOTER
+========================================================= -->
+
+<footer
+class="border-t border-cyan-400/10 mt-3 py-3 text-center">
+
+    <div
+    class="font-orbitron text-[8px] text-gray-600 tracking-widest">
+
+        ORBIT-X • REAL-TIME EARTH & SPACE VISUALIZATION ENGINE • 2026
+
+    </div>
+
+</footer>
+
+
+<!-- =========================================================
+     JAVASCRIPT
+========================================================= -->
+
+<script>
+
+/* =========================================================
+   GLOBAL VARIABLES
+========================================================= */
+
+let latestISS = null;
+
+let userPosition = null;
+
+let currentCameraMode = "earth";
+
+let issMarker = null;
+
+let userMarker = null;
+
+let user3DMarker = null;
+
+let issTrailPoints = [];
+
+let socket = null;
+
+
+/* =========================================================
+   EARTH CONSTANTS
+========================================================= */
+
+const EARTH_RADIUS = 4;
+
+const REAL_EARTH_RADIUS_KM = 6371;
+
+
+/* =========================================================
+   DOM
+========================================================= */
+
+const earthContainer =
+    document.getElementById("earth-container");
+
+const gpsModal =
+    document.getElementById("gps-modal");
+
+const connectionStatus =
+    document.getElementById("connection-status");
+
+
+/* =========================================================
+   LEAFLET MAP
+========================================================= */
+
+const miniMap = L.map("mini-map", {
+    zoomControl:true,
+    attributionControl:true
+}).setView([20,0],2);
+
+L.tileLayer(
+    "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
+    {
+        maxZoom:19,
+        attribution:"© OpenStreetMap contributors"
+    }
+).addTo(miniMap);
+
+
+/* =========================================================
+   CUSTOM MAP ICONS
+========================================================= */
+
+const issIcon = L.divIcon({
+
+    className:"iss-marker",
+
+    html:`
+        <div style="
+            width:14px;
+            height:14px;
+            border-radius:50%;
+            background:#00f3ff;
+            border:2px solid white;
+            box-shadow:
+                0 0 5px #00f3ff,
+                0 0 20px #00f3ff,
+                0 0 35px #00f3ff;
+        "></div>
+    `,
+
+    iconSize:[14,14],
+
+    iconAnchor:[7,7]
+
+});
+
+
+const userIcon = L.divIcon({
+
+    className:"user-marker",
+
+    html:`
+        <div style="
+            width:14px;
+            height:14px;
+            border-radius:50%;
+            background:#ff3355;
+            border:2px solid white;
+            box-shadow:
+                0 0 5px #ff3355,
+                0 0 20px #ff3355;
+        "></div>
+    `,
+
+    iconSize:[14,14],
+
+    iconAnchor:[7,7]
+
+});
+
+
+/* =========================================================
+   THREE.JS SCENE
+========================================================= */
+
+const scene =
+    new THREE.Scene();
+
+
+/* CAMERA */
+
+const camera =
+    new THREE.PerspectiveCamera(
+        45,
+        earthContainer.clientWidth /
+        earthContainer.clientHeight,
+        0.1,
+        2000
+    );
+
+camera.position.set(
+    0,
+    0,
+    15
+);
+
+
+/* RENDERER */
+
+const renderer =
+    new THREE.WebGLRenderer({
+        antialias:true,
+        alpha:true,
+        powerPreference:"high-performance"
+    });
+
+renderer.setPixelRatio(
+    Math.min(window.devicePixelRatio,2)
+);
+
+renderer.setSize(
+    earthContainer.clientWidth,
+    earthContainer.clientHeight
+);
+
+renderer.outputEncoding =
+    THREE.sRGBEncoding;
+
+renderer.toneMapping =
+    THREE.ACESFilmicToneMapping;
+
+renderer.toneMappingExposure =
+    1.15;
+
+earthContainer.appendChild(
+    renderer.domElement
+);
+
+
+/* =========================================================
+   ORBIT CONTROLS
+========================================================= */
+
+const controls =
+    new THREE.OrbitControls(
+        camera,
+        renderer.domElement
+    );
+
+controls.enableDamping = true;
+
+controls.dampingFactor = 0.045;
+
+controls.minDistance = 5.3;
+
+controls.maxDistance = 40;
+
+controls.enablePan = true;
+
+controls.panSpeed = .3;
+
+controls.rotateSpeed = .45;
+
+controls.zoomSpeed = .8;
+
+
+/* =========================================================
+   LIGHTING
+========================================================= */
+
+const ambientLight =
+    new THREE.AmbientLight(
+        0x33445c,
+        0.42
+    );
+
+scene.add(
+    ambientLight
+);
+
+
+const sunLight =
+    new THREE.DirectionalLight(
+        0xffffff,
+        2.8
+    );
+
+sunLight.position.set(
+    15,
+    8,
+    12
+);
+
+scene.add(
+    sunLight
+);
+
+
+/* =========================================================
+   SUN GLOW
+========================================================= */
+
+const sunMesh =
+    new THREE.Mesh(
+
+        new THREE.SphereGeometry(
+            0.35,
+            32,
+            32
+        ),
+
+        new THREE.MeshBasicMaterial({
+            color:0xffdd88
+        })
+
+    );
+
+sunMesh.position.set(
+    30,
+    15,
+    25
+);
+
+scene.add(
+    sunMesh
+);
+
+
+/* =========================================================
+   STAR FIELD
+========================================================= */
+
+const starsGeometry =
+    new THREE.BufferGeometry();
+
+const STAR_COUNT = 7000;
+
+const starPositions =
+    new Float32Array(
+        STAR_COUNT * 3
+    );
+
+for(
+    let i=0;
+    i<STAR_COUNT;
+    i++
+){
+
+    const i3=i*3;
+
+    const radius =
+        150 +
+        Math.random()*300;
+
+    const theta =
+        Math.random()*
+        Math.PI*2;
+
+    const phi =
+        Math.acos(
+            2*Math.random()-1
+        );
+
+    starPositions[i3] =
+        radius *
+        Math.sin(phi) *
+        Math.cos(theta);
+
+    starPositions[i3+1] =
+        radius *
+        Math.sin(phi) *
+        Math.sin(theta);
+
+    starPositions[i3+2] =
+        radius *
+        Math.cos(phi);
+
+}
+
+starsGeometry.setAttribute(
+    "position",
+    new THREE.BufferAttribute(
+        starPositions,
+        3
+    )
+);
+
+const stars =
+    new THREE.Points(
+
+        starsGeometry,
+
+        new THREE.PointsMaterial({
+            color:0xffffff,
+            size:.55,
+            transparent:true,
+            opacity:.85
+        })
+
+    );
+
+scene.add(stars);
+
+
+/* =========================================================
+   EARTH GROUP
+========================================================= */
+
+const earthGroup =
+    new THREE.Group();
+
+scene.add(
+    earthGroup
+);
+
+
+/* =========================================================
+   REAL EARTH TEXTURES
+========================================================= */
+
+/*
+    Real satellite-derived Earth imagery.
+    These are separate maps so the Earth can have:
+    - surface
+    - bump
+    - night lights
+    - clouds
+*/
+
+const textureLoader =
+    new THREE.TextureLoader();
+
+textureLoader.crossOrigin =
+    "anonymous";
+
+
+const EARTH_SURFACE =
+"https://raw.githubusercontent.com/mrdoob/three.js/dev/examples/textures/planets/earth_atmos_2048.jpg";
+
+
+const EARTH_BUMP =
+"https://raw.githubusercontent.com/mrdoob/three.js/dev/examples/textures/planets/earth_normal_2048.jpg";
+
+
+const EARTH_SPECULAR =
+"https://raw.githubusercontent.com/mrdoob/three.js/dev/examples/textures/planets/earth_specular_2048.jpg";
+
+
+const EARTH_NIGHT =
+"https://raw.githubusercontent.com/mrdoob/three.js/dev/examples/textures/planets/earth_lights_2048.png";
+
+
+const EARTH_CLOUDS =
+"https://raw.githubusercontent.com/mrdoob/three.js/dev/examples/textures/planets/earth_clouds_1024.png";
+
+
+/* =========================================================
+   EARTH MATERIAL
+========================================================= */
+
+const earthGeometry =
+    new THREE.SphereGeometry(
+        EARTH_RADIUS,
+        128,
+        128
+    );
+
+
+const earthMaterial =
+    new THREE.MeshPhongMaterial({
+
+        color:0xffffff,
+
+        shininess:22,
+
+        specular:0x557799,
+
+        transparent:false
+
+    });
+
+
+const earthMesh =
+    new THREE.Mesh(
+        earthGeometry,
+        earthMaterial
+    );
+
+earthGroup.add(
+    earthMesh
+);
+
+
+/* =========================================================
+   LOAD EARTH SURFACE
+========================================================= */
+
+textureLoader.load(
+
+    EARTH_SURFACE,
+
+    texture => {
+
+        texture.encoding =
+            THREE.sRGBEncoding;
+
+        earthMaterial.map =
+            texture;
+
+        earthMaterial.needsUpdate =
+            true;
+
+        document
+        .getElementById(
+            "texture-status"
+        )
+        .textContent =
+            "ONLINE";
+
+        document
+        .getElementById(
+            "texture-status"
+        )
+        .className =
+            "text-green-400";
+
+        document
+        .getElementById(
+            "earth-loading"
+        )
+        .style.display =
+            "none";
+
+    },
+
+    undefined,
+
+    () => {
+
+        document
+        .getElementById(
+            "texture-status"
+        )
+        .textContent =
+            "FALLBACK";
+
+        document
+        .getElementById(
+            "texture-status"
+        )
+        .className =
+            "text-orange-400";
+
+        document
+        .getElementById(
+            "earth-loading"
+        )
+        .style.display =
+            "none";
+
+    }
+
+);
+
+
+/* =========================================================
+   BUMP / NORMAL
+========================================================= */
+
+textureLoader.load(
+
+    EARTH_BUMP,
+
+    texture => {
+
+        earthMaterial.bumpMap =
+            texture;
+
+        earthMaterial.bumpScale =
+            0.055;
+
+        earthMaterial.needsUpdate =
+            true;
+
+    }
+
+);
+
+
+/* =========================================================
+   SPECULAR WATER MAP
+========================================================= */
+
+textureLoader.load(
+
+    EARTH_SPECULAR,
+
+    texture => {
+
+        earthMaterial.specularMap =
+            texture;
+
+        earthMaterial.specular =
+            new THREE.Color(
+                0x6da8c7
+            );
+
+        earthMaterial.shininess =
+            28;
+
+        earthMaterial.needsUpdate =
+            true;
+
+    }
+
+);
+
+
+/* =========================================================
+   CITY LIGHTS
+========================================================= */
+
+const nightMaterial =
+    new THREE.MeshBasicMaterial({
+
+        transparent:true,
+
+        opacity:.75,
+
+        blending:
+            THREE.AdditiveBlending,
+
+        depthWrite:false
+
+    });
+
+
+const nightEarth =
+    new THREE.Mesh(
+
+        new THREE.SphereGeometry(
+            EARTH_RADIUS*1.006,
+            128,
+            128
+        ),
+
+        nightMaterial
+
+    );
+
+earthGroup.add(
+    nightEarth
+);
+
+
+textureLoader.load(
+
+    EARTH_NIGHT,
+
+    texture => {
+
+        texture.encoding =
+            THREE.sRGBEncoding;
+
+        nightMaterial.map =
+            texture;
+
+        nightMaterial.needsUpdate =
+            true;
+
+    }
+
+);
+
+
+/* =========================================================
+   CLOUD LAYER
+========================================================= */
+
+const cloudMaterial =
+    new THREE.MeshPhongMaterial({
+
+        transparent:true,
+
+        opacity:.38,
+
+        depthWrite:false,
+
+        side:THREE.DoubleSide
+
+    });
+
+
+const cloudMesh =
+    new THREE.Mesh(
+
+        new THREE.SphereGeometry(
+            EARTH_RADIUS*1.014,
+            128,
+            128
+        ),
+
+        cloudMaterial
+
+    );
+
+earthGroup.add(
+    cloudMesh
+);
+
+
+textureLoader.load(
+
+    EARTH_CLOUDS,
+
+    texture => {
+
+        cloudMaterial.map =
+            texture;
+
+        cloudMaterial.alphaMap =
+            texture;
+
+        cloudMaterial.needsUpdate =
+            true;
+
+    }
+
+);
+
+
+/* =========================================================
+   ATMOSPHERIC BLUE HALO
+========================================================= */
+
+const atmosphereGeometry =
+    new THREE.SphereGeometry(
+        EARTH_RADIUS*1.055,
+        128,
+        128
+    );
+
+
+const atmosphereMaterial =
+    new THREE.ShaderMaterial({
+
+        transparent:true,
+
+        side:THREE.BackSide,
+
+        depthWrite:false,
+
+        uniforms:{
+            glowColor:{
+                value:
+                    new THREE.Color(
+                        0x36cfff
+                    )
+            }
+        },
+
+        vertexShader:`
+
+            varying vec3 vNormal;
+
+            void main(){
+
+                vNormal =
+                    normalize(
+                        normalMatrix *
+                        normal
+                    );
+
+                gl_Position =
+                    projectionMatrix *
+                    modelViewMatrix *
+                    vec4(
+                        position,
+                        1.0
+                    );
+
+            }
+
+        `,
+
+        fragmentShader:`
+
+            varying vec3 vNormal;
+
+            uniform vec3 glowColor;
+
+            void main(){
+
+                float intensity =
+                    pow(
+                        0.72 -
+                        dot(
+                            vNormal,
+                            vec3(
+                                0.0,
+                                0.0,
+                                1.0
+                            )
+                        ),
+                        3.5
+                    );
+
+                gl_FragColor =
+                    vec4(
+                        glowColor,
+                        intensity*.9
+                    );
+
+            }
+
+        `
+
+    });
+
+
+const atmosphere =
+    new THREE.Mesh(
+        atmosphereGeometry,
+        atmosphereMaterial
+    );
+
+earthGroup.add(
+    atmosphere
+);
+
+
+/* =========================================================
+   ISS GROUP
+========================================================= */
+
+function createDetailedISS(){
+
+    const group =
+        new THREE.Group();
+
+
+    const metal =
+        new THREE.MeshStandardMaterial({
+
+            color:0xd7dce0,
+
+            metalness:.85,
+
+            roughness:.24
+
+        });
+
+
+    const darkMetal =
+        new THREE.MeshStandardMaterial({
+
+            color:0x242b32,
+
+            metalness:.7,
+
+            roughness:.3
+
+        });
+
+
+    /*
+       Golden solar panel material
+    */
+
+    const solarGold =
+        new THREE.MeshStandardMaterial({
+
+            color:0xc99018,
+
+            metalness:.5,
+
+            roughness:.25,
+
+            emissive:0x241500
+
+        });
+
+
+    const solarBlue =
+        new THREE.MeshStandardMaterial({
+
+            color:0x143e69,
+
+            metalness:.7,
+
+            roughness:.2,
+
+            emissive:0x061326
+
+        });
+
+
+    /* Main truss */
+
+    const truss =
+        new THREE.Mesh(
+
+            new THREE.BoxGeometry(
+                3.4,
+                .12,
+                .12
+            ),
+
+            metal
+
+        );
+
+    group.add(
+        truss
+    );
+
+
+    /* Main modules */
+
+    for(
+        let i=-1;
+        i<=1;
+        i++
+    ){
+
+        const module =
+            new THREE.Mesh(
+
+                new THREE.CylinderGeometry(
+                    .23,
+                    .23,
+                    .72,
+                    20
+                ),
+
+                metal
+
+            );
+
+        module.rotation.z =
+            Math.PI/2;
+
+        module.position.x =
+            i*.62;
+
+        group.add(
+            module
+        );
+
+    }
+
+
+    /* central dark module */
+
+    const central =
+        new THREE.Mesh(
+
+            new THREE.BoxGeometry(
+                .42,
+                .34,
+                .42
+            ),
+
+            darkMetal
+
+        );
+
+    group.add(
+        central
+    );
+
+
+    /*
+       Solar arrays
+    */
+
+    for(
+        const side of [-1,1]
+    ){
+
+        for(
+            let panel=0;
+            panel<3;
+            panel++
+        ){
+
+            const p =
+                new THREE.Mesh(
+
+                    new THREE.BoxGeometry(
+                        1.15,
+                        .025,
+                        .52
+                    ),
+
+                    panel%2===0 ?
+                    solarBlue :
+                    solarGold
+
+                );
+
+            p.position.x =
+                side *
+                (2.0 + panel*.85);
+
+            p.position.z =
+                panel%2===0 ?
+                .3 :
+                -.3;
+
+            group.add(
+                p
+            );
+
+        }
+
+    }
+
+
+    /* vertical antennas */
+
+    for(
+        const x of [-1.1,1.1]
+    ){
+
+        const antenna =
+            new THREE.Mesh(
+
+                new THREE.CylinderGeometry(
+                    .018,
+                    .018,
+                    .65,
+                    8
+                ),
+
+                darkMetal
+
+            );
+
+        antenna.position.set(
+            x,
+            .35,
+            0
+        );
+
+        group.add(
+            antenna
+        );
+
+    }
+
+
+    /* Radiators */
+
+    for(
+        const x of [-.8,.8]
+    ){
+
+        const radiator =
+            new THREE.Mesh(
+
+                new THREE.BoxGeometry(
+                    .55,
+                    .06,
+                    .35
+                ),
+
+                new THREE.MeshStandardMaterial({
+                    color:0xffffff,
+                    metalness:.5,
+                    roughness:.4
+                })
+
+            );
+
+        radiator.position.set(
+            x,
+            -.3,
+            0
+        );
+
+        group.add(
+            radiator
+        );
+
+    }
+
+
+    group.scale.set(
+        .42,
+        .42,
+        .42
+    );
+
+
+    return group;
+
+}
+
+
+const issModel =
+    createDetailedISS();
+
+scene.add(
+    issModel
+);
+
+
+/* ISS glow */
+
+const issLight =
+    new THREE.PointLight(
+        0x00f3ff,
+        2,
+        3
+    );
+
+issModel.add(
+    issLight
+);
+
+
+/* =========================================================
+   ORBIT TRAIL
+========================================================= */
+
+const TRAIL_LENGTH = 300;
+
+const trailGeometry =
+    new THREE.BufferGeometry();
+
+const trailArray =
+    new Float32Array(
+        TRAIL_LENGTH*3
+    );
+
+trailGeometry.setAttribute(
+
+    "position",
+
+    new THREE.BufferAttribute(
+        trailArray,
+        3
+    )
+
+);
+
+
+const trailMaterial =
+    new THREE.LineBasicMaterial({
+
+        color:0x00f3ff,
+
+        transparent:true,
+
+        opacity:.7
+
+    });
+
+
+const orbitTrail =
+    new THREE.Line(
+        trailGeometry,
+        trailMaterial
+    );
+
+scene.add(
+    orbitTrail
+);
+
+
+/* =========================================================
+   ORBIT RING
+========================================================= */
+
+const orbitRingGeometry =
+    new THREE.BufferGeometry();
+
+const orbitRingPositions = [];
+
+for(
+    let i=0;
+    i<=360;
+    i++
+){
+
+    const a =
+        i*Math.PI/180;
+
+    /*
+       Approximate ISS inclination
+       around 51.6 degrees.
+    */
+
+    const x =
+        EARTH_RADIUS*1.075*
+        Math.cos(a);
+
+    const y =
+        EARTH_RADIUS*1.075*
+        Math.sin(a)*
+        Math.sin(
+            THREE.MathUtils.degToRad(
+                51.6
+            )
+        );
+
+    const z =
+        EARTH_RADIUS*1.075*
+        Math.sin(a)*
+        Math.cos(
+            THREE.MathUtils.degToRad(
+                51.6
+            )
+        );
+
+    orbitRingPositions.push(
+        x,y,z
+    );
+
+}
+
+orbitRingGeometry.setAttribute(
+
+    "position",
+
+    new THREE.Float32BufferAttribute(
+        orbitRingPositions,
+        3
+    )
+
+);
+
+
+const orbitRing =
+    new THREE.Line(
+
+        orbitRingGeometry,
+
+        new THREE.LineBasicMaterial({
+
+            color:0xffd166,
+
+            transparent:true,
+
+            opacity:.25
+
+        })
+
+    );
+
+scene.add(
+    orbitRing
+);
+
+
+/* =========================================================
+   LAT/LNG → THREE VECTOR
+========================================================= */
+
+function latLngAltToVector3(
+    lat,
+    lng,
+    altitudeKm=0
+){
+
+    /*
+       Convert geographical coordinates
+       into spherical Cartesian coordinates.
+    */
+
+    const normalizedAltitude =
+        altitudeKm /
+        REAL_EARTH_RADIUS_KM;
+
+    const radius =
+        EARTH_RADIUS *
+        (
+            1 +
+            normalizedAltitude
+        );
+
+
+    const phi =
+        (90-lat) *
+        Math.PI/180;
+
+
+    const theta =
+        (lng+180) *
+        Math.PI/180;
+
+
+    const x =
+        -(
+            radius *
+            Math.sin(phi) *
+            Math.cos(theta)
+        );
+
+
+    const y =
+        radius *
+        Math.cos(phi);
+
+
+    const z =
+        radius *
+        Math.sin(phi) *
+        Math.sin(theta);
+
+
+    return new THREE.Vector3(
+        x,
+        y,
+        z
+    );
+
+}
+
+
+/* =========================================================
+   USER GPS 3D MARKER
+========================================================= */
+
+function createUserMarker3D(
+    lat,
+    lng
+){
+
+    if(
+        user3DMarker
+    ){
+
+        earthGroup.remove(
+            user3DMarker
+        );
+
+    }
+
+
+    user3DMarker =
+        new THREE.Group();
+
+
+    const point =
+        new THREE.Mesh(
+
+            new THREE.SphereGeometry(
+                .09,
+                20,
+                20
+            ),
+
+            new THREE.MeshBasicMaterial({
+                color:0xff3355
+            })
+
+        );
+
+
+    const ring =
+        new THREE.Mesh(
+
+            new THREE.RingGeometry(
+                .13,
+                .18,
+                32
+            ),
+
+            new THREE.MeshBasicMaterial({
+
+                color:0xff3355,
+
+                transparent:true,
+
+                opacity:.8,
+
+                side:
+                    THREE.DoubleSide
+
+            })
+
+        );
+
+
+    ring.rotation.x =
+        Math.PI/2;
+
+
+    user3DMarker.add(
+        point,
+        ring
+    );
+
+
+    user3DMarker.position.copy(
+
+        latLngAltToVector3(
+            lat,
+            lng,
+            0
+        ).normalize()
+        .multiplyScalar(
+            EARTH_RADIUS*1.025
+        )
+
+    );
+
+
+    earthGroup.add(
+        user3DMarker
+    );
+
+}
+
+
+/* =========================================================
+   DISTANCE CALCULATION
+========================================================= */
+
+function calculateDistance(
+    lat1,
+    lon1,
+    lat2,
+    lon2
+){
+
+    const R =
+        6371;
+
+    const dLat =
+        (lat2-lat1) *
+        Math.PI/180;
+
+    const dLon =
+        (lon2-lon1) *
+        Math.PI/180;
+
+    const a =
+        Math.sin(dLat/2) *
+        Math.sin(dLat/2)
+        +
+        Math.cos(
+            lat1*Math.PI/180
+        ) *
+        Math.cos(
+            lat2*Math.PI/180
+        ) *
+        Math.sin(dLon/2) *
+        Math.sin(dLon/2);
+
+
+    return R *
+        2 *
+        Math.atan2(
+            Math.sqrt(a),
+            Math.sqrt(1-a)
+        );
+
+}
+
+
+/* =========================================================
+   UPDATE ISS
+========================================================= */
+
+function updateISS(data){
+
+    latestISS =
+        data;
+
+
+    document
+    .getElementById("iss-lat")
+    .textContent =
+        Number(data.latitude)
+        .toFixed(4)+"°";
+
+
+    document
+    .getElementById("iss-lng")
+    .textContent =
+        Number(data.longitude)
+        .toFixed(4)+"°";
+
+
+    document
+    .getElementById("iss-alt")
+    .textContent =
+        Number(data.altitude)
+        .toFixed(2)+" km";
+
+
+    document
+    .getElementById("iss-velocity")
+    .textContent =
+        Math.round(
+            Number(data.velocity)
+        ).toLocaleString()
+        +" km/h";
+
+
+    document
+    .getElementById("iss-visibility")
+    .textContent =
+        String(
+            data.visibility ||
+            "unknown"
+        ).toUpperCase();
+
+
+    document
+    .getElementById("iss-footprint")
+    .textContent =
+        Math.round(
+            Number(data.footprint)
+        )+" km";
+
+
+    /*
+       3D position
+    */
+
+    const position =
+        latLngAltToVector3(
+            Number(data.latitude),
+            Number(data.longitude),
+            Number(data.altitude)
+        );
+
+
+    issModel.position.copy(
+        position
+    );
+
+
+    /*
+       Make ISS face Earth
+    */
+
+    issModel.lookAt(
+        0,
+        0,
+        0
+    );
+
+
+    /*
+       Orbit trail
+    */
+
+    issTrailPoints.push(
+        position.clone()
+    );
+
+
+    if(
+        issTrailPoints.length >
+        TRAIL_LENGTH
+    ){
+
+        issTrailPoints.shift();
+
+    }
+
+
+    for(
+        let i=0;
+        i<TRAIL_LENGTH;
+        i++
+    ){
+
+        const p =
+            issTrailPoints[i];
+
+        if(p){
+
+            trailArray[i*3] =
+                p.x;
+
+            trailArray[i*3+1] =
+                p.y;
+
+            trailArray[i*3+2] =
+                p.z;
+
+        }
+
+    }
+
+
+    trailGeometry
+    .attributes
+    .position
+    .needsUpdate =
+        true;
+
+
+    /*
+       2D map
+    */
+
+    if(
+        !issMarker
+    ){
+
+        issMarker =
+            L.marker(
+                [
+                    data.latitude,
+                    data.longitude
+                ],
+                {
+                    icon:issIcon
+                }
+            )
+            .addTo(
+                miniMap
+            );
+
+    }else{
+
+        issMarker.setLatLng(
+            [
+                data.latitude,
+                data.longitude
+            ]
+        );
+
+    }
+
+
+    /*
+       User distance
+    */
+
+    if(
+        userPosition
+    ){
+
+        const distance =
+            calculateDistance(
+
+                userPosition.lat,
+                userPosition.lng,
+
+                Number(data.latitude),
+                Number(data.longitude)
+
+            );
+
+
+        document
+        .getElementById(
+            "user-distance"
+        )
+        .textContent =
+            Math.round(
+                distance
+            ).toLocaleString()
+            +" km";
+
+    }
+
+}
+
+
+/* =========================================================
+   LIVE ISS API
+========================================================= */
+
+async function fetchISS(){
+
+    try{
+
+        const response =
+            await fetch(
+                "https://api.wheretheiss.at/v1/satellites/25544",
+                {
+                    cache:"no-store"
+                }
+            );
+
+
+        if(
+            !response.ok
+        ){
+
+            throw new Error(
+                "ISS API error"
+            );
+
+        }
+
+
+        const data =
+            await response.json();
+
+
+        updateISS(
+            data
+        );
+
+
+        connectionStatus
+            .textContent =
+            "ONLINE";
+
+
+        connectionStatus
+            .className =
+            "text-[9px] text-green-400 font-bold";
+
+
+    }catch(error){
+
+        console.error(
+            error
+        );
+
+
+        connectionStatus
+            .textContent =
+            "RETRYING";
+
+
+        connectionStatus
+            .className =
+            "text-[9px] text-yellow-400 font-bold";
+
+    }
+
+}
+
+
+/* =========================================================
+   SOCKET.IO OPTIONAL CONNECTION
+========================================================= */
+
+/*
+   Standalone mode does NOT require a Socket.IO server.
+
+   If you later deploy a Node.js Socket.IO backend,
+   change this to your server URL.
+
+   Example:
+
+   socket = io("https://your-server.com");
+
+*/
+
+try{
+
+    if(
+        typeof io !==
+        "undefined"
+    ){
+
+        /*
+           No connection is attempted here
+           because standalone operation must work
+           without a backend.
+        */
+
+    }
+
+}catch(e){
+
+    console.log(
+        "Socket.IO optional mode"
+    );
+
+}
+
+
+/* =========================================================
+   GPS
+========================================================= */
+
+function requestGPS(){
+
+    if(
+        !navigator.geolocation
+    ){
+
+        document
+        .getElementById(
+            "user-coordinates"
+        )
+        .textContent =
+            "Geolocation unavailable.";
+
+        closeGPSModal();
+
+        return;
+
+    }
+
+
+    navigator
+    .geolocation
+    .getCurrentPosition(
+
+        position => {
+
+            userPosition = {
+
+                lat:
+                    position
+                    .coords
+                    .latitude,
+
+                lng:
+                    position
+                    .coords
+                    .longitude
+
+            };
+
+
+            const lat =
+                userPosition.lat;
+
+            const lng =
+                userPosition.lng;
+
+
+            document
+            .getElementById(
+                "user-coordinates"
+            )
+            .textContent =
+                `GPS LOCKED • ${lat.toFixed(5)}° • ${lng.toFixed(5)}°`;
+
+
+            /*
+               2D map marker
+            */
+
+            if(
+                !userMarker
+            ){
+
+                userMarker =
+                    L.marker(
+                        [lat,lng],
+                        {
+                            icon:userIcon
+                        }
+                    )
+                    .addTo(
+                        miniMap
+                    )
+                    .bindPopup(
+                        "USER GPS LOCATION"
+                    );
+
+            }else{
+
+                userMarker.setLatLng(
+                    [lat,lng]
+                );
+
+            }
+
+
+            /*
+               3D Earth marker
+            */
+
+            createUserMarker3D(
+                lat,
+                lng
+            );
+
+
+            /*
+               Distance
+            */
+
+            if(
+                latestISS
+            ){
+
+                const distance =
+                    calculateDistance(
+
+                        lat,
+                        lng,
+
+                        Number(
+                            latestISS.latitude
+                        ),
+
+                        Number(
+                            latestISS.longitude
+                        )
+
+                    );
+
+
+                document
+                .getElementById(
+                    "user-distance"
+                )
+                .textContent =
+                    Math.round(
+                        distance
+                    ).toLocaleString()
+                    +" km";
+
+            }
+
+
+            closeGPSModal();
+
+        },
+
+        error => {
+
+            console.warn(
+                "GPS:",
+                error
+            );
+
+
+            document
+            .getElementById(
+                "user-coordinates"
+            )
+            .textContent =
+                "GPS permission denied / unavailable.";
+
+            closeGPSModal();
+
+        },
+
+        {
+
+            enableHighAccuracy:true,
+
+            timeout:10000,
+
+            maximumAge:5000
+
+        }
+
+    );
+
+}
+
+
+/* =========================================================
+   GPS MODAL
+========================================================= */
+
+function closeGPSModal(){
+
+    gpsModal.style.opacity =
+        "0";
+
+    gpsModal.style.pointerEvents =
+        "none";
+
+    setTimeout(
+        () => {
+
+            gpsModal.style.display =
+                "none";
+
+        },
+        500
+    );
+
+}
+
+
+document
+.getElementById("allow-gps")
+.addEventListener(
+    "click",
+    requestGPS
+);
+
+
+document
+.getElementById("guest-mode")
+.addEventListener(
+    "click",
+    closeGPSModal
+);
+
+
+/* =========================================================
+   CAMERA MODES
+========================================================= */
+
+window.setCameraMode =
+function(mode){
+
+    currentCameraMode =
+        mode;
+
+
+    document
+    .getElementById(
+        "earth-mode"
+    )
+    .classList
+    .toggle(
+        "active",
+        mode==="earth"
+    );
+
+
+    document
+    .getElementById(
+        "iss-mode"
+    )
+    .classList
+    .toggle(
+        "active",
+        mode==="iss"
+    );
+
+
+    document
+    .getElementById(
+        "free-mode"
+    )
+    .classList
+    .toggle(
+        "active",
+        mode==="free"
+    );
+
+
+    if(
+        mode==="earth"
+    ){
+
+        camera.position.set(
+            0,
+            0,
+            15
+        );
+
+        controls.target.set(
+            0,
+            0,
+            0
+        );
+
+    }
+
+
+    if(
+        mode==="free"
+    ){
+
+        controls.enablePan =
+            true;
+
+    }
+
+
+    if(
+        mode==="iss"
+    ){
+
+        controls.enablePan =
+            false;
+
+    }
+
+};
+
+
+/* =========================================================
+   ANIMATION LOOP
+========================================================= */
+
+const clock =
+    new THREE.Clock();
+
+
+function animate(){
+
+    requestAnimationFrame(
+        animate
+    );
+
+
+    const delta =
+        clock.getDelta();
+
+
+    /*
+       Earth rotation
+
+       This makes the real Earth
+       continuously rotate.
+    */
+
+    earthGroup.rotation.y +=
+        delta * 0.025;
+
+
+    /*
+       Clouds move slightly faster
+       than the ground.
+    */
+
+    cloudMesh.rotation.y +=
+        delta * 0.034;
+
+
+    /*
+       City lights rotate with Earth.
+    */
+
+    nightEarth.rotation.y =
+        earthGroup.rotation.y;
+
+
+    /*
+       Stars slowly rotate.
+    */
+
+    stars.rotation.y +=
+        delta * 0.0008;
+
+
+    /*
+       Orbit ring rotates
+       slowly around Earth.
+    */
+
+    orbitRing.rotation.y +=
+        delta * 0.006;
+
+
+    /*
+       ISS Chase Camera
+    */
+
+    if(
+        currentCameraMode==="iss" &&
+        latestISS
+    ){
+
+        const issPosition =
+            latLngAltToVector3(
+
+                Number(
+                    latestISS.latitude
+                ),
+
+                Number(
+                    latestISS.longitude
+                ),
+
+                Number(
+                    latestISS.altitude
+                )
+
+            );
+
+
+        const direction =
+            issPosition
+            .clone()
+            .normalize();
+
+
+        const desiredCamera =
+            issPosition
+            .clone()
+            .add(
+                direction.multiplyScalar(
+                    2.0
+                )
+            );
+
+
+        camera.position.lerp(
+            desiredCamera,
+            0.035
+        );
+
+
+        controls.target.lerp(
+            issPosition,
+            0.05
+        );
+
+    }
+
+
+    /*
+       Earth orbit mode
+    */
+
+    if(
+        currentCameraMode==="earth"
+    ){
+
+        controls.target.lerp(
+            new THREE.Vector3(
+                0,
+                0,
+                0
+            ),
+            .04
+        );
+
+    }
+
+
+    /*
+       Pulsing GPS marker
+    */
+
+    if(
+        user3DMarker
+    ){
+
+        const pulse =
+            1 +
+            Math.sin(
+                performance.now()*.004
+            )*.18;
+
+
+        user3DMarker
+        .children[1]
+        .scale.set(
+            pulse,
+            pulse,
+            pulse
+        );
+
+    }
+
+
+    controls.update();
+
+
+    renderer.render(
+        scene,
+        camera
+    );
+
+}
+
+
+/* =========================================================
+   RESIZE
+========================================================= */
+
+window.addEventListener(
+    "resize",
+    () => {
+
+        const width =
+            earthContainer.clientWidth;
+
+        const height =
+            earthContainer.clientHeight;
+
+
+        camera.aspect =
+            width/height;
+
+
+        camera.updateProjectionMatrix();
+
+
+        renderer.setSize(
+            width,
+            height
+        );
+
+    }
+);
+
+
+/* =========================================================
+   START SYSTEM
+========================================================= */
+
+fetchISS();
+
+/*
+   Required fallback polling:
+   every 3 seconds.
+*/
+
+setInterval(
+    fetchISS,
+    3000
+);
+
+
+/*
+   Start rendering.
+*/
+
+animate();
+
+
+/*
+   Start with Earth Orbit mode.
+*/
+
+setCameraMode(
+    "earth"
+);
+
+</script>
+
+</body>
+</html>
